@@ -1,0 +1,32 @@
+{
+  "name": "balatro-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MCP server for controlling Balatro via balatrobot",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "balatro",
+    "mcp",
+    "balatrobot"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.3",
+    "better-sqlite3": "^12.10.0",
+    "undici": "^7.27.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head><title>Balatro Live</title>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+h1 { color: #e94560; margin-bottom: 10px; }
+#board { display: flex; gap: 20px; flex-wrap: wrap; }
+#cards { min-height: 100px; }
+.card { display: inline-block; background: #16213e; border: 1px solid #0f3460; border-radius: 6px; padding: 8px 12px; margin: 3px; font-size: 14px; }
+.card .suit-H, .card .suit-D { color: #e94560; }
+.card .suit-S, .card .suit-C { color: #e0e0e0; }
+.card .enh { color: #f5a623; font-size: 10px; }
+.card .edition { color: #7bed9f; font-size: 10px; }
+#info { margin: 10px 0; }
+.info-line { margin: 3px 0; }
+.label { color: #888; }
+.val { color: #7bed9f; }
+#reasoning { background: #16213e; border-radius: 6px; padding: 12px; margin-top: 10px; max-height: 200px; overflow-y: auto; font-size: 12px; white-space: pre-wrap; }
+#state-label { color: #e94560; font-weight: bold; }
+.chips-bar { height: 20px; background: #0f3460; border-radius: 10px; margin: 5px 0; overflow: hidden; }
+.chips-fill { height: 100%; background: #7bed9f; transition: width 0.5s; }
+</style>
+</head>
+<body>
+<h1>♠ Balatro Live ♥</h1>
+<div id="info"></div>
+<div class="chips-bar"><div class="chips-fill" id="chips-bar" style="width:0%"></div></div>
+<div id="board">
+  <div><h3>Hand</h3><div id="hand"></div></div>
+  <div><h3>Jokers</h3><div id="jokers"></div></div>
+  <div><h3>Consumables</h3><div id="consumables"></div></div>
+</div>
+<div id="reasoning">Waiting for game...</div>
+
+<script>
+const es = new EventSource("/events");
+const info = document.getElementById("info");
+const handEl = document.getElementById("hand");
+const jokersEl = document.getElementById("jokers");
+const consEl = document.getElementById("consumables");
+const reasoningEl = document.getElementById("reasoning");
+const chipsBar = document.getElementById("chips-bar");
+
+function renderCard(c) {
+  if (!c) return '<span class="card">?</span>';
+  const suitSym = { H: "\u2665", D: "\u2666", C: "\u2663", S: "\u2660" }[c.suit] || c.suit;
+  const rank = c.rank || "";
+  let extra = "";
+  if (c.enhancement) extra += ` <span class="enh">[${c.enhancement}]</span>`;
+  if (c.edition) extra += ` <span class="edition">[${c.edition}]</span>`;
+  return `<span class="card suit-${c.suit}">${rank}${suitSym}${extra}</span>`;
+}
+
+es.onmessage = (e) => {
+  const ev = JSON.parse(e.data);
+  if (ev.type === "connected") return;
+
+  if (ev.type === "state" || ev.type === "decision") {
+    const s = ev.state || {};
+    const blind = s.blind || {};
+    const score = s.score || {};
+    const target = score.target || blind?.score || 0;
+
+    info.innerHTML = `
+      <div class="info-line"><span class="label">State:</span> <span id="state-label">${s.state}</span></div>
+      <div class="info-line"><span class="label">Ante:</span> <span class="val">${s.ante || 0}.${s.round || 0}</span></div>
+      <div class="info-line"><span class="label">Money:</span> <span class="val">$${s.money || 0}</span></div>
+      <div class="info-line"><span class="label">Blind:</span> <span class="val">${blind.name || "—"}</span></div>
+      <div class="info-line"><span class="label">Score:</span> <span class="val">${score.chips || 0} / ${target}</span></div>
+      <div class="info-line"><span class="label">Hands/Disc:</span> <span class="val">${s.hands_left || 0} / ${s.discards_left || 0}</span></div>
+    `;
+
+    if (target > 0) {
+      const pct = Math.min(100, ((score.chips || 0) / target) * 100);
+      chipsBar.style.width = pct + "%";
+    }
+
+    handEl.innerHTML = (s.hand_cards || []).map(renderCard).join("");
+    jokersEl.innerHTML = (s.jokers || []).map(renderCard).join("");
+    consEl.innerHTML = (s.consumables || []).map(renderCard).join("");
+  }
+
+  if (ev.type === "decision") {
+    reasoningEl.textContent = `${ev.action?.tool}(${JSON.stringify(ev.action?.args)})\n${ev.reasoning || ""}`;
+  }
+
+  if (ev.type === "result") {
+    reasoningEl.textContent = `Outcome: ${ev.outcome}, Ante ${ev.finalAnte}`;
+  }
+};
+</script>
+</body>
+</html>

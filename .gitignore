@@ -1,0 +1,16 @@
+# deps & build
+node_modules/
+dist/
+
+# secrets
+.env
+.env.local
+*.key
+
+# generated data
+logs/
+bench/*.db
+bench/*.db-wal
+bench/*.db-shm
+bench/last-results.json
+*.tsbuildinfo
