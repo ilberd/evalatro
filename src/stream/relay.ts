@@ -8,6 +8,16 @@ import { globalBus, BalatroEvent, EventBus } from "../bus/index.js";
 const WEB_DIR = process.env.WEB_DIR
   ? path.resolve(process.env.WEB_DIR)
   : fs.existsSync(path.resolve("web", "dist", "index.html")) ? path.resolve("web", "dist") : path.resolve("web");
+// The SPA is "built" when web/dist has hashed assets. If not, serve a friendly
+// hint instead of the raw Vite entry (which 404s on /src/main.tsx).
+const SPA_BUILT = fs.existsSync(path.join(WEB_DIR, "assets"));
+const NOT_BUILT_HTML = `<!doctype html><meta charset="utf-8"><title>Balatro × LLM</title>
+<body style="font-family:system-ui,Segoe UI,Roboto,sans-serif;background:#14161b;color:#e8ecf3;padding:48px;line-height:1.6;max-width:640px;margin:0 auto">
+<h1 style="color:#ffce5c">Balatro × LLM</h1>
+<p>The web viewer isn't built yet. Run this once, then reload:</p>
+<pre style="background:#1c2027;border:1px solid #2e3542;padding:14px;border-radius:8px;color:#57d977">npm run web:build</pre>
+<p style="color:#8a93a6">(or <code style="color:#e8ecf3">npm run setup</code> on a fresh clone). Your game is still running in the terminal — its result is recorded and submitted regardless of the viewer.</p>
+</body>`;
 const MAX_BUFFER = 1000;
 const MAX_INGEST_BODY = 256 * 1024;
 const MAX_SUBMIT_BODY = 8 * 1024 * 1024;
@@ -128,7 +138,7 @@ export function startRelay(port: number, bus: EventBus = globalBus): RelayHandle
       let leaderboard: unknown[] = [];
       try {
         const m = await import("../bench/db.js");
-        leaderboard = m.leaderboard(m.getDb(), { officialOnly: q.get("official") === "1" });
+        leaderboard = m.leaderboard(m.getDb(), { officialOnly: q.get("official") === "1", source: q.get("source") || undefined });
       } catch { /* no db yet — fine */ }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", clients: clients.size, events: buffer.length, leaderboard }));
@@ -148,6 +158,13 @@ export function startRelay(port: number, bus: EventBus = globalBus): RelayHandle
       try { const m = await import("../bench/db.js"); data = m.gameMoves(m.getDb(), q.get("game") || ""); } catch { /* no db */ }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(data));
+      return;
+    }
+
+    // Web UI not built yet → friendly hint instead of a broken page (HTML routes only).
+    if (!SPA_BUILT && (url === "/" || !path.extname(url))) {
+      res.writeHead(200, { "Content-Type": MIME[".html"] });
+      res.end(NOT_BUILT_HTML);
       return;
     }
 

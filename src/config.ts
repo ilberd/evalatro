@@ -148,6 +148,14 @@ export function loadConfig(): BenchConfig {
   if (process.env.SUBMITTER !== undefined) cfg.submitterHandle = process.env.SUBMITTER;
   if (process.env.LIVE_INGEST_URL !== undefined) cfg.liveIngestUrl = process.env.LIVE_INGEST_URL;
   if (process.env.LIVE_INGEST_KEY !== undefined) cfg.liveIngestKey = process.env.LIVE_INGEST_KEY;
+  // Run-shape overrides (defaults stay in the config file): SEEDS=a,b,c for the
+  // bench matrix; SEED=x for a single seed (live, or a one-seed bench); plus
+  // RUNS_PER_SEED / DECK / STAKE.
+  if (process.env.SEEDS) cfg.seeds = process.env.SEEDS.split(",").map(s => s.trim()).filter(Boolean);
+  else if (process.env.SEED) cfg.seeds = [process.env.SEED.trim()];
+  if (process.env.RUNS_PER_SEED) cfg.runsPerSeed = Math.max(1, Number(process.env.RUNS_PER_SEED) || cfg.runsPerSeed);
+  if (process.env.DECK) cfg.deck = process.env.DECK.trim();
+  if (process.env.STAKE) cfg.stake = process.env.STAKE.trim();
   cached = cfg;
   return cfg;
 }

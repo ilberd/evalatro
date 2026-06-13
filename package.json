@@ -13,6 +13,7 @@
     "mcp": "node dist/server.js",
     "live": "node dist/live.js",
     "bench": "node dist/bench/run.js",
+    "bench:watch": "node dist/bench/run.js --watch",
     "leaderboard": "node dist/bench/leaderboard.js",
     "test:adapter": "node dist/llm/test-adapter.js",
     "test:score": "node dist/scoring/test-score.js",
@@ -21,7 +22,8 @@
     "codehash": "node dist/scoring/print-codehash.js",
     "serve": "node dist/serve.js",
     "web:dev": "npm --prefix web run dev",
-    "web:build": "npm --prefix web run build"
+    "web:build": "npm --prefix web run build",
+    "setup": "npm --prefix web install && npm run build && npm run web:build"
   },
   "keywords": [
     "balatro",

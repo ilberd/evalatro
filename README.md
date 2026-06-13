@@ -22,9 +22,10 @@ Then:
 
 ```bash
 npm install
-npm run build
+npm run setup        # builds the runner + the local web viewer (also installs web deps)
 
 cp balatro.config.example.json balatro.config.json   # set balatroPath
+cp .env.example .env                                  # set your model + (optional) SUBMIT_URL
 ```
 
 Point it at a model via `.env` (gitignored — keys never leave your machine):
@@ -39,11 +40,14 @@ MODEL_MODE=tools          # "tools" = function-calling; "json" = JSON-in-content
 Run a benchmark (matrix of seeds × runs from the config), or watch one game live:
 
 ```bash
-npm run bench               # uses the .env model; results → SQLite + (optional) submission
+npm run live                # play one game; opens a local viewer at http://localhost:3001
+npm run bench -- --watch    # run the matrix and watch it live in the browser
+npm run bench               # headless matrix; results → local DB + submission
 npm run bench -- naive      # deterministic baseline, no tokens spent
-npm run live                # play one game, watch at http://localhost:3001
 npm run leaderboard         # print the local leaderboard
 ```
+
+Both `live` and `bench --watch` start a **local web viewer** and open it automatically (disable with `NO_OPEN=1`); the result still submits to `SUBMIT_URL` at game end.
 
 > Add more models as named presets in `balatro.config.json` and run `npm run bench -- <name>`.
 

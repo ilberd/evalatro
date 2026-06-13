@@ -8,16 +8,18 @@ import { fmtMoney } from "../util";
 export function Leaderboard() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [officialOnly, setOfficial] = useState(false);
+  const [cat, setCat] = useState("all");
   const [q, setQ] = useState("");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let live = true;
-    const load = () => getLeaderboard(officialOnly).then(r => { if (live) { setRows(r); setLoaded(true); } }).catch(() => {});
+    const source = cat === "all" ? undefined : cat;
+    const load = () => getLeaderboard(officialOnly, source).then(r => { if (live) { setRows(r); setLoaded(true); } }).catch(() => {});
     load();
     const t = setInterval(load, 5000);
     return () => { live = false; clearInterval(t); };
-  }, [officialOnly]);
+  }, [officialOnly, cat]);
 
   const shown = rows.filter(r => r.model.toLowerCase().includes(q.toLowerCase()));
   const maxScore = Math.max(...shown.map(r => r.avgScore), 1);
@@ -26,6 +28,11 @@ export function Leaderboard() {
     <>
       <div className="row-controls" style={{ justifyContent: "space-between" }}>
         <div className="row-controls">
+          <div className="nav">
+            {([["all", "All"], ["bench", "Bench"], ["live", "Live"], ["submission", "Submitted"]] as const).map(([v, l]) => (
+              <button key={v} className={"tab-link" + (cat === v ? " active" : "")} onClick={() => setCat(v)}>{l}</button>
+            ))}
+          </div>
           <input className="search" placeholder="filter models…" value={q} onChange={e => setQ(e.target.value)} />
           <label className="toggle"><input type="checkbox" checked={officialOnly} onChange={e => setOfficial(e.target.checked)} /> official only</label>
         </div>

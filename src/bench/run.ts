@@ -2,6 +2,7 @@ import * as fs from "fs";
 import { loadConfig, envModel, resolveModelConfig, ModelConfig } from "../config.js";
 import { makeOpenAiPlayer } from "../llm/openai-adapter.js";
 import { maybeSubmit } from "../submit.js";
+import { openBrowser } from "../web-open.js";
 import { launchBalatro, waitForHealth, sleep } from "../game/launch.js";
 import { runGame } from "../game/loop.js";
 import { naiveDecide, DecideFn } from "../game/decide.js";
@@ -31,13 +32,18 @@ async function main() {
   const cfg = loadConfig();
   const args = process.argv.slice(2);
   const modelName = args.find(a => !a.startsWith("--"));
-  const watch = args.includes("--watch");
+  // `--watch` can be swallowed by PowerShell/npm `--` forwarding, so also honor WATCH=1.
+  const watch = args.includes("--watch") || !!process.env.WATCH;
 
   const { label, decide, model } = resolvePlayer(modelName);
   if (args.includes("--no-submit")) cfg.submit = false;
   if (watch) {
-    startRelay(cfg.relayPort);
-    console.error(`Watching live at http://localhost:${cfg.relayPort}`);
+    // RELAY_PORT lets the local watch view sit on a different port than a
+    // backend you're submitting to (which may own the default relayPort).
+    const watchPort = Number(process.env.RELAY_PORT) || cfg.relayPort;
+    startRelay(watchPort);
+    console.error(`Watching live at http://localhost:${watchPort}`);
+    openBrowser(`http://localhost:${watchPort}`);
   }
 
   const db = getDb();
@@ -59,7 +65,7 @@ async function main() {
         await waitForHealth(client);
         // SAME seed across the K runs → isolates the model's own variance.
         const rec = await runGame(decide, { client, model: label, gameId, seed, logStream });
-        insertRun(db, rec);
+        insertRun(db, rec, "bench");
         await maybeSubmit(db, rec, model, cfg);
         console.error(
           `  ante=${rec.maxAnte} actions=${rec.actions} illegal=${rec.illegalActions}` +

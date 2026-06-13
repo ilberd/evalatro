@@ -209,10 +209,15 @@ const SCORED_OUTCOMES = new Set(["won", "lost", "stuck"]);
  * (won | lost | stuck). Games excluded for infra reasons (error | cap) are
  * surfaced via `incomplete` for transparency.
  */
-export function leaderboard(db: Database.Database, opts: { officialOnly?: boolean } = {}): LeaderboardRow[] {
+const SOURCES = new Set(["bench", "live", "submission", "local"]);
+
+export function leaderboard(db: Database.Database, opts: { officialOnly?: boolean; source?: string } = {}): LeaderboardRow[] {
+  const clauses: string[] = [];
+  if (opts.officialOnly) clauses.push("official = 1");
+  if (opts.source && SOURCES.has(opts.source)) clauses.push(`source = '${opts.source}'`); // whitelisted, safe to inline
+  const where = clauses.length ? " WHERE " + clauses.join(" AND ") : "";
   const rows = db.prepare(
-    "SELECT model, maxAnte, won, outcome, score, finalMoney, actions, illegalActions, durationMs, tokensOut, costUsd FROM runs" +
-    (opts.officialOnly ? " WHERE official = 1" : ""),
+    "SELECT model, maxAnte, won, outcome, score, finalMoney, actions, illegalActions, durationMs, tokensOut, costUsd FROM runs" + where,
   ).all() as LbRow[];
 
   const byModel = new Map<string, LbRow[]>();

@@ -1,7 +1,11 @@
 import { LeaderboardRow, GameSummaryT, GameDetail } from "./api-types";
 
-export async function getLeaderboard(officialOnly = false): Promise<LeaderboardRow[]> {
-  const r = await fetch("/api" + (officialOnly ? "?official=1" : ""));
+export async function getLeaderboard(officialOnly = false, source?: string): Promise<LeaderboardRow[]> {
+  const params = new URLSearchParams();
+  if (officialOnly) params.set("official", "1");
+  if (source) params.set("source", source);
+  const qs = params.toString();
+  const r = await fetch("/api" + (qs ? "?" + qs : ""));
   const j = await r.json();
   return j.leaderboard || [];
 }
