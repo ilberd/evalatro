@@ -6,14 +6,14 @@
  * transcript). One implementation ⇒ the two numbers always agree unless the
  * transcript was tampered with.
  *
- * A standard run = 8 antes × 3 blinds (Small/Big/Boss) = a 24-blind ladder;
- * winning = beating the Ante 8 Boss. Score = progress × legality × 100, so a
- * flawless ante-8 win is exactly 100 and any illegal move drops below it.
+ * Evalatro v2 targets clearing Ante 12. Score = progress × legality × 100, so
+ * a flawless target-ante clear is exactly 100 and any illegal move drops below it.
  */
 
 export const BLINDS_PER_ANTE = 3;
-export const ANTES_TO_WIN = 8;
-export const TOTAL_BLINDS = ANTES_TO_WIN * BLINDS_PER_ANTE; // 24
+export const DEFAULT_TARGET_ANTE = 12;
+export const ANTES_TO_WIN = DEFAULT_TARGET_ANTE;
+export const TOTAL_BLINDS = DEFAULT_TARGET_ANTE * BLINDS_PER_ANTE;
 
 /** Position of each blind within an ante. */
 const BLIND_INDEX: Record<string, number> = { SMALL: 0, BIG: 1, BOSS: 2 };
@@ -22,7 +22,7 @@ const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
 export interface ScoreInput {
-  /** The corrected win flag (state.won === true || ante ≥ 9). */
+  /** True only after clearing the benchmark target ante. */
   won: boolean;
   /** Antes fully cleared, 0..8. */
   antesCleared: number;
@@ -35,6 +35,8 @@ export interface ScoreInput {
 }
 
 export interface ScoreResult extends ScoreInput {
+  /** Benchmark target used for this score. */
+  targetAnte: number;
   /** 0..100 — the headline number. */
   score: number;
   /** 0..1 — ladder progress (1.0 only on a real win). */
@@ -48,16 +50,18 @@ export interface ScoreResult extends ScoreInput {
 }
 
 /** The pure formula. */
-export function computeScore(i: ScoreInput): ScoreResult {
-  const antesCleared = clamp(i.antesCleared, 0, ANTES_TO_WIN);
+export function computeScore(i: ScoreInput, targetAnte = DEFAULT_TARGET_ANTE): ScoreResult {
+  const target = Math.max(1, Math.floor(targetAnte || DEFAULT_TARGET_ANTE));
+  const totalBlinds = target * BLINDS_PER_ANTE;
+  const antesCleared = clamp(i.antesCleared, 0, target);
   const blindIndex = clamp(i.blindIndex, 0, BLINDS_PER_ANTE - 1);
   const activeFraction = clamp(i.activeFraction, 0, 0.99);
   const within = blindIndex + activeFraction; // [0, 2.99]
-  const ladderPos = Math.min(antesCleared * BLINDS_PER_ANTE + within, TOTAL_BLINDS);
+  const ladderPos = Math.min(antesCleared * BLINDS_PER_ANTE + within, totalBlinds);
 
   // Only a real win reaches progress 1.0; the 0.99 clamp guarantees every
   // non-win stays strictly below a "completed" 24th blind.
-  const progress = i.won ? 1 : Math.min(ladderPos, TOTAL_BLINDS - 0.01) / TOTAL_BLINDS;
+  const progress = i.won ? 1 : Math.min(ladderPos, totalBlinds - 0.01) / totalBlinds;
 
   const illegalRate = i.illegalActions / Math.max(1, i.actions);
   const legality = clamp(1 - illegalRate, 0, 1);
@@ -69,6 +73,7 @@ export function computeScore(i: ScoreInput): ScoreResult {
   if (!i.won) score = Math.min(score, 99.9);
 
   return {
+    targetAnte: target,
     won: i.won, antesCleared, blindIndex, activeFraction,
     actions: i.actions, illegalActions: i.illegalActions,
     score, progress, legality, ladderPos, illegalRate,
@@ -99,12 +104,13 @@ export interface MoveSnapshot {
  *    ROUND_EVAL/SHOP the summarizer falls back to the boss blind), so blindIndex
  *    and the chips/target fraction are read ONLY from SELECTING_HAND snapshots.
  */
-export function deriveScoreInput(snapshots: MoveSnapshot[], won: boolean): ScoreInput {
+export function deriveScoreInput(snapshots: MoveSnapshot[], won: boolean, targetAnte = DEFAULT_TARGET_ANTE): ScoreInput {
   const actions = snapshots.length;
   const illegalActions = snapshots.filter(s => s.illegal != null).length;
+  const target = Math.max(1, Math.floor(targetAnte || DEFAULT_TARGET_ANTE));
 
   const maxAnteObserved = snapshots.reduce((m, s) => Math.max(m, s.ante || 0), 0);
-  const antesCleared = won ? ANTES_TO_WIN : clamp(maxAnteObserved - 1, 0, ANTES_TO_WIN);
+  const antesCleared = won ? target : clamp(maxAnteObserved - 1, 0, target);
 
   // Within the last ante reached, the furthest blind actually attempted and the
   // best chips/target seen on it. Between blinds (no SELECTING_HAND for the last
@@ -133,5 +139,10 @@ export function deriveScoreInput(snapshots: MoveSnapshot[], won: boolean): Score
 
 /** Convenience: transcript → final score in one call. */
 export function scoreFromTranscript(snapshots: MoveSnapshot[], won: boolean): ScoreResult {
-  return computeScore(deriveScoreInput(snapshots, won));
+  return scoreFromTranscriptForTarget(snapshots, won, DEFAULT_TARGET_ANTE);
+}
+
+/** Convenience: transcript в†’ final score for an explicit target ante. */
+export function scoreFromTranscriptForTarget(snapshots: MoveSnapshot[], won: boolean, targetAnte: number): ScoreResult {
+  return computeScore(deriveScoreInput(snapshots, won, targetAnte), targetAnte);
 }

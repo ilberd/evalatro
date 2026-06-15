@@ -28,8 +28,9 @@ export function buildSubmission(
     submittedAt: Date.now(),
     ...(opts.submitter ? { submitter: opts.submitter } : {}),
     model: { name: model.name, baseURLHost: host, modelId: model.model, mode: model.mode },
-    config: { deck: rec.deck, stake: rec.stake, seed: rec.seed },
+    config: { deck: rec.deck, stake: rec.stake, seed: rec.seed, targetAnte: rec.targetAnte },
     runRecord: rec,
+    finalState: rec.finalState,
     moves: moves.map(m => ({
       step: m.step, ts: m.ts, state: m.state, tool: m.tool, args: m.args ?? {},
       ...(m.reasoning ? { reasoning: m.reasoning } : {}),

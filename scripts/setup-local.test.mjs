@@ -134,7 +134,7 @@ test("buildSetupPlan shows missing game as a warning in check mode", () => {
   assert.deepEqual(plan.blockers, []);
   assert(plan.warnings.some((warning) => warning.includes("Balatro is not installed")));
   assert(plan.steps.some((step) => step.title === "Install balatrobot CLI"));
-  assert(plan.steps.some((step) => step.title === "Install Steamodded and balatrobot mods"));
+  assert(plan.steps.some((step) => step.title === "Install Steamodded, balatrobot, and Evalatro unlock helper mods"));
 });
 
 test("buildSetupPlan blocks full install when Balatro is missing", () => {
@@ -148,7 +148,7 @@ test("buildSetupPlan blocks full install when Balatro is missing", () => {
   assert.equal(plan.canInstallLovely, false);
   assert(plan.blockers.some((blocker) => blocker.includes("Balatro is not installed")));
   assert(!plan.steps.some((step) => step.title === "Install and verify this repo"));
-  assert(!plan.steps.some((step) => step.title === "Install Steamodded and balatrobot mods"));
+  assert(!plan.steps.some((step) => step.title === "Install Steamodded, balatrobot, and Evalatro unlock helper mods"));
   assert(!plan.steps.some((step) => step.title.includes("Lovely")));
 });
 
@@ -214,7 +214,7 @@ test("buildSetupPlan keeps install-mods scoped to mod folders", () => {
   assert(!plan.steps.some((step) => step.title === "Install and verify this repo"));
   assert(!plan.steps.some((step) => step.title === "Install balatrobot CLI"));
   assert(!plan.steps.some((step) => step.title === "Install Lovely Injector manually"));
-  assert(plan.steps.some((step) => step.title === "Install Steamodded and balatrobot mods"));
+  assert(plan.steps.some((step) => step.title === "Install Steamodded, balatrobot, and Evalatro unlock helper mods"));
 });
 
 test("ensureLocalFiles writes ignored config files without secrets", () => {
@@ -237,6 +237,9 @@ test("ensureLocalFiles writes ignored config files without secrets", () => {
   assert.equal(config.submitUrl, "https://evalatro.dev");
   assert.deepEqual(config.models, []);
   assert.equal(config.launchMode, "spawn");
+  assert.equal(config.targetAnte, 12);
+  assert.equal(config.evalProfileSlot, 2);
+  assert.equal(config.autoUnlockAll, true);
 
   const env = fs.readFileSync(path.join(dir, ".env"), "utf8");
   assert(!env.includes("sk-example"));

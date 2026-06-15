@@ -8,7 +8,7 @@ import * as path from "path";
  * a run is scored, then regenerate the known hash (npm run codehash) and add it
  * to src/server/known-hashes.ts.
  */
-export const EVAL_VERSION = "0.3.0";
+export const EVAL_VERSION = "0.4.0";
 
 /**
  * The files whose contents define WHAT the model experiences and HOW a run is

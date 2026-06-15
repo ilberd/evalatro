@@ -24,6 +24,7 @@ export const RunRecordSchema = z.object({
   seed: z.string().max(60),
   deck: z.string().max(40),
   stake: z.string().max(40),
+  targetAnte: z.number().int().optional(),
   maxAnte: z.number(),
   finalRound: z.number(),
   finalMoney: z.number(),
@@ -56,8 +57,10 @@ export const SubmissionSchema = z.object({
     deck: z.string().max(40),
     stake: z.string().max(40),
     seed: z.string().max(60),
+    targetAnte: z.number().int().optional(),
   }),
   runRecord: RunRecordSchema,
+  finalState: z.any().optional(),
   moves: z.array(MoveSubmissionSchema).max(5000),
   clientMeta: z.object({
     os: z.string().max(120).optional(),

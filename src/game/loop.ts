@@ -5,7 +5,7 @@ import { summarizeState, computeLegalActions, SummarizedState } from "../state/s
 import { DecideFn, DecideCtx, Decision } from "./decide.js";
 import { globalBus, EventBus } from "../bus/index.js";
 import { loadConfig } from "../config.js";
-import { scoreFromTranscript, MoveSnapshot } from "../scoring/score.js";
+import { scoreFromTranscriptForTarget, MoveSnapshot } from "../scoring/score.js";
 
 /** One row of benchmark results — also the shape persisted to SQLite. */
 export interface RunRecord {
@@ -14,6 +14,7 @@ export interface RunRecord {
   seed: string;
   deck: string;
   stake: string;
+  targetAnte: number;
   maxAnte: number;
   finalRound: number;
   finalMoney: number;
@@ -22,6 +23,7 @@ export interface RunRecord {
   outcome: "won" | "lost" | "cap" | "stuck" | "error";
   /** 0–100 benchmark score, computed from the transcript (see scoring/score.ts). */
   score: number;
+  finalState?: SummarizedState;
   actions: number;
   illegalActions: number;
   durationMs: number;
@@ -73,9 +75,10 @@ export async function runGame(decide: DecideFn, opts: RunOptions): Promise<RunRe
   const deck = opts.deck ?? cfg.deck;
   const stake = opts.stake ?? cfg.stake;
   const maxDecisions = opts.maxDecisions ?? cfg.maxDecisionsPerGame;
+  const targetAnte = Math.max(1, cfg.targetAnte || 12);
 
   const rec: RunRecord = {
-    gameId, model, seed, deck, stake,
+    gameId, model, seed, deck, stake, targetAnte,
     maxAnte: 0, finalRound: 0, finalMoney: 0, won: false, outcome: "error", score: 0,
     actions: 0, illegalActions: 0, durationMs: 0,
     tokensIn: 0, tokensOut: 0, costUsd: 0,
@@ -167,6 +170,7 @@ export async function runGame(decide: DecideFn, opts: RunOptions): Promise<RunRe
         reasoning: decision.reasoning, action: { tool: decision.tool, args: decision.args }, legalActions, illegal,
       });
       emitState(state);
+      if (state.ante >= targetAnte + 1) break;
 
       // Loop guards — with no decision cap, these are the only non-terminal ways
       // a game ends: repeated rejected moves, or the state not changing at all.
@@ -183,16 +187,17 @@ export async function runGame(decide: DecideFn, opts: RunOptions): Promise<RunRe
       }
     }
 
-    // Win = the real win flag, or having advanced PAST ante 8 (ante_num ≥ 9).
-    // state.ante hits 8 the moment ante 7's boss falls, so the old ">= 8" counted
-    // merely *reaching* ante 8 — and even *losing* on its boss — as a win.
-    rec.won = state.won === true || state.ante >= 9;
+    // Benchmark win = having advanced PAST the target ante.
+    // state.ante hits N the moment ante N-1's boss falls, so merely reaching
+    // the target ante is not enough.
+    rec.won = state.ante >= targetAnte + 1;
     // maxAnte = antes fully cleared (8 on a win; ante_num-1 otherwise, since the
     // ante counter only advances once a boss has been beaten).
-    rec.maxAnte = rec.won ? 8 : Math.max(0, state.ante - 1);
+    rec.maxAnte = rec.won ? targetAnte : Math.max(0, state.ante - 1);
     rec.finalRound = state.round;
     rec.finalMoney = state.money;
-    rec.score = scoreFromTranscript(snapshots, rec.won).score;
+    rec.finalState = state;
+    rec.score = scoreFromTranscriptForTarget(snapshots, rec.won, targetAnte).score;
     // Classify how the game ended (drives score-eligibility in the leaderboard:
     // won/lost/stuck count, error/cap are excluded). The cap branch is dead while
     // maxDecisions=0; a decide() failure is infra, not the model → "error".

@@ -7,6 +7,7 @@ import { stdin as input, stdout as output } from "node:process";
 
 export const SMODS_REPO = "https://github.com/Steamodded/smods.git";
 export const BALATROBOT_REPO = "https://github.com/coder/balatrobot.git";
+export const EVALATRO_UNLOCK_MOD = "evalatro_unlock";
 export const LOVELY_RELEASE_BASE = "https://github.com/ethangreen-dev/lovely-injector/releases/latest/download";
 export const UV_INSTALL_PS1 = "https://astral.sh/uv/install.ps1";
 export const UV_INSTALL_SH = "https://astral.sh/uv/install.sh";
@@ -174,6 +175,7 @@ export function defaultLayout(env = {}) {
       modsDir,
       smodsDir: joinFor(platform, modsDir, "smods"),
       balatrobotModDir: joinFor(platform, modsDir, "balatrobot"),
+      evalatroUnlockModDir: joinFor(platform, modsDir, EVALATRO_UNLOCK_MOD),
       lovelyDir: gameDir,
       lovelyFiles: ["liblovely.dylib", "run_lovely_macos.sh"],
       launchMode: "spawn",
@@ -191,6 +193,7 @@ export function defaultLayout(env = {}) {
       modsDir,
       smodsDir: joinFor(platform, modsDir, "smods"),
       balatrobotModDir: joinFor(platform, modsDir, "balatrobot"),
+      evalatroUnlockModDir: joinFor(platform, modsDir, EVALATRO_UNLOCK_MOD),
       lovelyDir: gameDir,
       lovelyFiles: ["version.dll"],
       launchMode: "spawn",
@@ -224,6 +227,7 @@ export function defaultLayout(env = {}) {
     modsDir,
     smodsDir: joinFor(platform, modsDir, "smods"),
     balatrobotModDir: joinFor(platform, modsDir, "balatrobot"),
+    evalatroUnlockModDir: joinFor(platform, modsDir, EVALATRO_UNLOCK_MOD),
     lovelyDir: gameDir,
     lovelyFiles: ["version.dll"],
     launchMode: "attach",
@@ -337,7 +341,7 @@ export function buildSetupPlan({ options, layout, exists = fs.existsSync, comman
   }
   if (options.mode !== "install-lovely" && options.mode !== "uninstall" && !blockers.length) {
     steps.push({
-      title: "Install Steamodded and balatrobot mods",
+      title: "Install Steamodded, balatrobot, and Evalatro unlock helper mods",
       commands: [
         ["git", "clone", "--depth", "1", SMODS_REPO, effectiveLayout.smodsDir],
         ["git", "clone", "--depth", "1", BALATROBOT_REPO, effectiveLayout.balatrobotModDir],
@@ -383,6 +387,9 @@ export function ensureLocalFiles({ repoRoot, write, layout }) {
       const config = {
         _comment: "Local machine config. API keys stay in .env only.",
         launchMode: layout.launchMode,
+        targetAnte: 12,
+        evalProfileSlot: layout.platform === "linux" ? 0 : 2,
+        autoUnlockAll: true,
         balatroPath: layout.platform === "linux" ? "" : layout.gameExecutable,
         lovelyPath: "",
         basePort: 12346,
@@ -544,9 +551,19 @@ function cloneOrPull(dir, repo, options) {
   }
 }
 
+function copyEvalatroUnlockMod(repoRoot, layout, options) {
+  const source = path.join(repoRoot, "assets", EVALATRO_UNLOCK_MOD);
+  const target = layout.evalatroUnlockModDir;
+  console.log(`Copy ${source} -> ${target}`);
+  if (options.dryRun) return;
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.cpSync(source, target, { recursive: true });
+}
+
 function cleanupGameSide(layout, options) {
   removePath(layout.smodsDir, options);
   removePath(layout.balatrobotModDir, options);
+  removePath(layout.evalatroUnlockModDir, options);
   removePath(path.join(layout.modsDir, "lovely"), options);
   for (const file of lovelyAssetFor(layout).files) {
     removePath(lovelyTarget(layout, file), options);
@@ -611,6 +628,7 @@ export async function executeSetup({ repoRoot, options, plan }) {
     if (!options.dryRun) fs.mkdirSync(plan.layout.modsDir, { recursive: true });
     cloneOrPull(plan.layout.smodsDir, SMODS_REPO, commandOptions);
     cloneOrPull(plan.layout.balatrobotModDir, BALATROBOT_REPO, commandOptions);
+    copyEvalatroUnlockMod(repoRoot, plan.layout, commandOptions);
   }
 
   if ((options.mode === "install" || options.mode === "install-lovely") && plan.canInstallLovely) {
@@ -620,11 +638,11 @@ export async function executeSetup({ repoRoot, options, plan }) {
 }
 
 export function printHelp() {
-  console.log(`Usage: npm run setup:local -- [options]
+  console.log(`Usage: node scripts/setup-local.mjs [options]
 
 Options:
   --check                  Print detected paths and next steps without writing.
-  --install                Install CLI deps, repo deps, local configs, and mods.
+  --install                Install CLI deps, repo deps, local configs, mods, and unlock helper.
   --install-mods           Only create/update game-side mod folders.
   --install-lovely         Only download/install Lovely into the Balatro game folder.
   --uninstall              Remove helper-installed CLI, repo outputs, mods, and Lovely files.

@@ -9,6 +9,7 @@
  */
 export const KNOWN_HASHES: Record<string, string> = {
   "0.3.0": "sha256:80c77c52c18c7e39a2f248b1a5a976d2411025f989a27bbf63a60edae2bf39a8",
+  "0.4.0": "sha256:e71ee0ae0bb40a0478ff8c93cd5e438c676281f79f91b5c724b6cecd8d1155a0",
 };
 
 export function isOfficialHash(evalVersion: string, codeHash: string): boolean {

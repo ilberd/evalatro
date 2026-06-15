@@ -24,6 +24,7 @@ export function getDb(): Database.Database {
       seed TEXT NOT NULL,
       deck TEXT NOT NULL DEFAULT 'RED',
       stake TEXT NOT NULL DEFAULT 'WHITE',
+      targetAnte INTEGER NOT NULL DEFAULT 12,
       maxAnte INTEGER NOT NULL DEFAULT 0,
       finalRound INTEGER NOT NULL DEFAULT 0,
       finalMoney INTEGER NOT NULL DEFAULT 0,
@@ -85,18 +86,42 @@ export function getDb(): Database.Database {
   try { db.exec("ALTER TABLE runs ADD COLUMN score REAL NOT NULL DEFAULT 0"); } catch { /* already present */ }
   try { db.exec("ALTER TABLE runs ADD COLUMN source TEXT NOT NULL DEFAULT 'local'"); } catch { /* already present */ }
   try { db.exec("ALTER TABLE runs ADD COLUMN official INTEGER NOT NULL DEFAULT 0"); } catch { /* already present */ }
+  try { db.exec("ALTER TABLE runs ADD COLUMN targetAnte INTEGER NOT NULL DEFAULT 8"); } catch { /* already present */ }
   _db = db;
   return db;
 }
 
 export function insertRun(db: Database.Database, r: RunRecord, source = "local", official = 0): number {
   const stmt = db.prepare(`
-    INSERT INTO runs (gameId, model, seed, deck, stake, maxAnte, finalRound, finalMoney, won, outcome, score,
+    INSERT INTO runs (gameId, model, seed, deck, stake, targetAnte, maxAnte, finalRound, finalMoney, won, outcome, score,
                       actions, illegalActions, durationMs, tokensIn, tokensOut, costUsd, error, ts, source, official)
-    VALUES (@gameId, @model, @seed, @deck, @stake, @maxAnte, @finalRound, @finalMoney, @won, @outcome, @score,
+    VALUES (@gameId, @model, @seed, @deck, @stake, @targetAnte, @maxAnte, @finalRound, @finalMoney, @won, @outcome, @score,
             @actions, @illegalActions, @durationMs, @tokensIn, @tokensOut, @costUsd, @error, @ts, @source, @official)
   `);
-  return stmt.run({ ...r, won: r.won ? 1 : 0, ts: r.ts || Date.now(), source, official }).lastInsertRowid as number;
+  return stmt.run({
+    gameId: r.gameId,
+    model: r.model,
+    seed: r.seed,
+    deck: r.deck,
+    stake: r.stake,
+    targetAnte: r.targetAnte,
+    maxAnte: r.maxAnte,
+    finalRound: r.finalRound,
+    finalMoney: r.finalMoney,
+    won: r.won ? 1 : 0,
+    outcome: r.outcome,
+    score: r.score,
+    actions: r.actions,
+    illegalActions: r.illegalActions,
+    durationMs: r.durationMs,
+    tokensIn: r.tokensIn,
+    tokensOut: r.tokensOut,
+    costUsd: r.costUsd,
+    error: r.error,
+    ts: r.ts || Date.now(),
+    source,
+    official,
+  }).lastInsertRowid as number;
 }
 
 interface RunRow {

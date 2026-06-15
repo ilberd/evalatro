@@ -24,7 +24,12 @@ function resolvePlayer(modelName?: string): { label: string; decide: DecideFn; m
   // resolveModelConfig throws a helpful message if the name/env isn't configured;
   // makeOpenAiPlayer fails fast if the key env var is missing.
   const m = modelName ? resolveModelConfig(modelName) : envModel();
-  if (!m) return { label: "naive", decide: naiveDecide, model: null };
+  if (!m) {
+    throw new Error(
+      "No benchmark model configured. Set BASE_URL / BASE_KEY / MODEL in .env, " +
+      "pass a model name from balatro.config.json, or run `npm run bench -- naive` for the deterministic baseline.",
+    );
+  }
   return { label: m.name, decide: makeOpenAiPlayer(m), model: m };
 }
 

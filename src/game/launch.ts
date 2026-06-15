@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import { loadConfig } from "../config.js";
 import { BalatroBotClient } from "../client/balatrobot.js";
+import { prepareEvalProfile } from "./profile.js";
 
 export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -18,10 +19,16 @@ export function launchBalatro(port?: number): GameHandle {
   if (cfg.launchMode === "attach") {
     return { port: p, stop: () => {} };
   }
+  const preparedProfile = prepareEvalProfile(cfg.evalProfileSlot);
 
   const pathKey = Object.keys(process.env).find(k => k.toLowerCase() === "path") ?? "PATH";
   const pathParts = [cfg.pythonScriptsDir, cfg.userBin, process.env[pathKey]].filter(Boolean);
-  const env = { ...process.env, [pathKey]: pathParts.join(path.delimiter) };
+  const env = {
+    ...process.env,
+    [pathKey]: pathParts.join(path.delimiter),
+    ...(cfg.autoUnlockAll ? { EVALATRO_UNLOCK: "1" } : {}),
+    ...(cfg.evalProfileSlot ? { EVALATRO_PROFILE_SLOT: String(cfg.evalProfileSlot) } : {}),
+  };
   const args = [
     "serve", "--fast",
     "--port", String(p),
@@ -38,16 +45,21 @@ export function launchBalatro(port?: number): GameHandle {
     env,
   });
   let exited = false;
-  proc.once("exit", () => { exited = true; });
+  proc.once("exit", () => { exited = true; preparedProfile.restore(); });
 
   return {
     port: p,
     proc,
     stop: () => {
-      if (!proc.pid) return;
+      if (!proc.pid) {
+        preparedProfile.restore();
+        return;
+      }
       try {
         if (process.platform === "win32") {
-          spawn("taskkill", ["/F", "/T", "/PID", String(proc.pid)], { stdio: "ignore", shell: false });
+          const killer = spawn("taskkill", ["/F", "/T", "/PID", String(proc.pid)], { stdio: "ignore", shell: false });
+          killer.once("exit", () => preparedProfile.restore());
+          setTimeout(() => preparedProfile.restore(), 5000).unref?.();
           return;
         }
         process.kill(-proc.pid, "SIGTERM");
@@ -55,9 +67,10 @@ export function launchBalatro(port?: number): GameHandle {
           if (!exited) {
             try { process.kill(-proc.pid!, "SIGKILL"); } catch { /* best effort */ }
           }
+          preparedProfile.restore();
         }, 5000);
         timer.unref?.();
-      } catch { /* best effort */ }
+      } catch { /* best effort */ preparedProfile.restore(); }
     },
   };
 }

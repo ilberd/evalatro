@@ -72,7 +72,7 @@ Run one live game:
 npm run live
 ```
 
-The local viewer opens at <http://localhost:3001> while `live`, `bench --watch`, or `serve` is running.
+The local viewer opens at <http://localhost:3001> while `live`, `bench:watch`, or `serve` is running.
 
 ## What Gets Installed
 
@@ -91,13 +91,13 @@ The setup helper can install the repo pieces, mods, and Lovely files. It intenti
 into Steam.
 
 ```bash
-npm run setup:install                   # one-command install: CLI deps, repo deps, configs, mods, and Lovely
+npm run setup:install                   # one-command install: CLI deps, repo deps, configs, mods, unlock helper, and Lovely
 npm run setup:check                     # print detected paths and missing pieces
 npm run setup:uninstall                 # remove helper-installed pieces
-npm run setup:local -- --install        # advanced form: same installer, but with confirmation and extra flags
-npm run setup:local -- --install-mods   # only create/update Steamodded + balatrobot mod folders
-npm run setup:local -- --install-lovely # only install Lovely into the game folder
-npm run setup:local -- --dry-run        # print what would happen
+node scripts/setup-local.mjs --install        # advanced form: same installer, but with confirmation and extra flags
+node scripts/setup-local.mjs --install-mods   # only create/update Steamodded + balatrobot + unlock helper mod folders
+node scripts/setup-local.mjs --install-lovely # only install Lovely into the game folder
+node scripts/setup-local.mjs --dry-run        # print what would happen
 ```
 
 On Windows and macOS, `npm run setup:install` also bootstraps `uv` if it is not already on `PATH`, then uses it to
@@ -117,12 +117,20 @@ On Windows, the helper reads Steam's `libraryfolders.vdf` and tries every Steam 
 misses your install, pass the game directory or executable explicitly:
 
 ```bash
-npm run setup:local -- --install --game-path "D:\\SteamLibrary\\steamapps\\common\\Balatro\\Balatro.exe"
+node scripts/setup-local.mjs --install --game-path "D:\\SteamLibrary\\steamapps\\common\\Balatro\\Balatro.exe"
 ```
 
 `--uninstall` removes the helper-installed pieces: `balatrobot` CLI, local repo outputs (`node_modules`, `dist`,
-`.env`, `balatro.config.json`, logs/bench data), Steamodded, the balatrobot mod, Lovely files, and Lovely runtime logs.
+`.env`, `balatro.config.json`, logs/bench data), Steamodded, the balatrobot mod, the Evalatro unlock helper, Lovely files, and Lovely runtime logs.
 It does not uninstall Balatro itself.
+
+`setup:install` also installs a tiny `evalatro_unlock` helper mod. During `spawn` runs, Evalatro temporarily switches
+Balatro to a dedicated benchmark profile slot (`evalProfileSlot`, default `2`) and unlocks/discovers all content there.
+Your normal profile files are not edited. Set `"evalProfileSlot": 0` to disable this automation.
+
+The unlock helper copies Balatro profile slot `1` as the dedicated slot. You must launch Balatro
+once through Steam first so that slot `1` exists; otherwise Evalatro stops with a clear message
+telling you to launch the game and rerun.
 
 For agent-assisted setup, hand [`SETUP_WITH_AI.md`](SETUP_WITH_AI.md) to an AI coding agent with shell access.
 
@@ -153,8 +161,9 @@ persistent tool.
 1. Put Lovely's `version.dll` next to `Balatro.exe`.
 2. Clone or download Steamodded into `%AppData%\Balatro\Mods\smods\`.
 3. Place the balatrobot mod in `%AppData%\Balatro\Mods\balatrobot\`.
-4. Launch Balatro once through Steam. The main menu should show a **Mods** button.
-5. Keep `"launchMode": "spawn"` in `balatro.config.json`.
+4. Place the Evalatro unlock helper in `%AppData%\Balatro\Mods\evalatro_unlock\`.
+5. Launch Balatro once through Steam. The main menu should show a **Mods** button.
+6. Keep `"launchMode": "spawn"` in `balatro.config.json`.
 
 </details>
 
@@ -165,7 +174,8 @@ persistent tool.
 2. If Gatekeeper blocks them: `xattr -rd com.apple.quarantine liblovely.dylib run_lovely_macos.sh`.
 3. Put Steamodded in `~/Library/Application Support/Balatro/Mods/smods/`.
 4. Put the balatrobot mod in `~/Library/Application Support/Balatro/Mods/balatrobot/`.
-5. Keep `"launchMode": "spawn"`.
+5. Put the Evalatro unlock helper in `~/Library/Application Support/Balatro/Mods/evalatro_unlock/`.
+6. Keep `"launchMode": "spawn"`.
 
 </details>
 
@@ -189,29 +199,40 @@ Upstream source of truth: the [balatrobot installation guide](https://coder.gith
 ```bash
 npm run live -- naive       # deterministic smoke test, no tokens spent
 npm run live                # one game with the .env model
-npm run bench -- --watch    # seed matrix with live browser view
+npm run bench:watch         # seed matrix with live browser view
 npm run bench               # headless seed matrix
+npm run bench -- naive      # deterministic baseline matrix, no tokens spent
+npm run bench:watch -- naive # baseline matrix with live browser view
 npm run leaderboard         # print the local leaderboard
 ```
+
+`npm run live`, `npm run bench`, and `npm run bench:watch` use `BASE_URL`, `BASE_KEY`, `MODEL`, and `MODEL_MODE`
+from `.env` when no model name is passed. If `.env` has no active model settings, real-model commands stop instead
+of silently falling back to `naive`.
 
 Add named model presets in `balatro.config.json`, then run:
 
 ```bash
 npm run bench -- <model-name>
+npm run bench:watch -- <model-name>
 npm run live -- <model-name>
 ```
 
+Use `npm run bench:watch` for the live benchmark viewer. Avoid `npm run bench -- --watch` on Windows because some
+npm/PowerShell combinations do not forward that flag reliably.
+
 ## Scoring
 
-A standard run is **8 antes x 3 blinds**: Small, Big, Boss for each ante. Winning means beating the Ante 8 Boss.
+Evalatro v2 targets **clearing Ante 12**. The base game win at Ante 8 is only a milestone; it is not a benchmark win.
+The runner stops as soon as the model advances past Ante 12, so a clean target clear is exactly 100.
 
 ```text
-progress = ladder position / 24 + partial chip credit on the losing blind
+progress = ladder position / (targetAnte * 3) + partial chip credit on the losing blind
 legality = 1 - illegalMoves / totalMoves
 score    = round(progress * legality * 100, 1)
 ```
 
-Only a real win can score 100. Illegal moves reduce the score. A model's leaderboard number is the mean score over
+Only a target-ante clear can score 100. Illegal moves reduce the score. A model's leaderboard number is the mean score over
 scored games: `won`, `lost`, and `stuck`. Provider errors and explicit caps are excluded as infrastructure failures.
 
 The scorer lives in [`src/scoring/score.ts`](src/scoring/score.ts) and is used twice:
@@ -227,12 +248,19 @@ Finished real-model games submit to the public leaderboard by default:
 
 Opt out:
 
+```powershell
+$env:SUBMIT="false"; npm run bench
+```
+
 ```bash
 SUBMIT=false npm run bench
-npm run bench -- --no-submit
 ```
 
 Override the destination:
+
+```powershell
+$env:SUBMIT_URL="https://your-leaderboard.example"; npm run bench
+```
 
 ```bash
 SUBMIT_URL=https://your-leaderboard.example npm run bench

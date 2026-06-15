@@ -16,6 +16,8 @@ function loadDotEnv(): void {
       let val = t.slice(eq + 1).trim();
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
         val = val.slice(1, -1);
+      } else {
+        val = val.replace(/\s+#.*$/, "").trim();
       }
       if (!(key in process.env)) process.env[key] = val;
     }
@@ -60,6 +62,12 @@ export interface ModelConfig {
 export interface BenchConfig {
   /** How the harness gets a balatrobot HTTP server: spawn it, or attach to one already running. */
   launchMode: "spawn" | "attach";
+  /** Benchmark target: clearing this ante is a perfect-progress run before legality penalties. */
+  targetAnte: number;
+  /** Dedicated Balatro profile slot for Evalatro. 0 disables profile switching/unlock automation. */
+  evalProfileSlot: number;
+  /** Unlock all Balatro content in the dedicated Evalatro profile before spawning the game. */
+  autoUnlockAll: boolean;
   /** Path to Balatro's launcher executable. Empty lets balatrobot auto-detect when possible. */
   balatroPath: string;
   /** Path to Lovely (version.dll/liblovely.dylib). Derived from balatroPath dir if omitted. */
@@ -137,6 +145,9 @@ const defaultUserBin =
 
 const DEFAULTS: BenchConfig = {
   launchMode: "spawn",
+  targetAnte: 12,
+  evalProfileSlot: 2,
+  autoUnlockAll: true,
   balatroPath: defaultBalatroPath,
   lovelyPath: "",
   pythonScriptsDir: defaultPythonScriptsDir,
@@ -174,6 +185,13 @@ export function loadConfig(): BenchConfig {
   if (process.env.LAUNCH_MODE === "spawn" || process.env.LAUNCH_MODE === "attach") {
     cfg.launchMode = process.env.LAUNCH_MODE;
   }
+  if (process.env.TARGET_ANTE) cfg.targetAnte = Number(process.env.TARGET_ANTE) || cfg.targetAnte;
+  if (process.env.EVALATRO_PROFILE_SLOT) cfg.evalProfileSlot = Number(process.env.EVALATRO_PROFILE_SLOT) || 0;
+  if (process.env.EVALATRO_AUTO_UNLOCK !== undefined) {
+    cfg.autoUnlockAll = !["false", "0", "no"].includes(process.env.EVALATRO_AUTO_UNLOCK.toLowerCase());
+  }
+  cfg.targetAnte = Math.max(1, Math.floor(cfg.targetAnte || 12));
+  cfg.evalProfileSlot = Math.max(0, Math.min(3, Math.floor(cfg.evalProfileSlot || 0)));
   if (!cfg.lovelyPath && cfg.launchMode !== "attach" && cfg.balatroPath) {
     cfg.lovelyPath = process.platform === "darwin"
       ? path.resolve(path.dirname(cfg.balatroPath), "..", "..", "..", "liblovely.dylib")

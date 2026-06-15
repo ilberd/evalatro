@@ -1,0 +1,14 @@
+{
+  "id": "evalatro_unlock",
+  "name": "Evalatro Unlock Helper",
+  "author": ["Evalatro"],
+  "description": "One-shot helper that unlocks content only inside the dedicated Evalatro profile.",
+  "prefix": "EVALATRO",
+  "main_file": "evalatro_unlock.lua",
+  "priority": 100,
+  "badge_colour": "bd1f2d",
+  "badge_text_colour": "FFFFFF",
+  "display_name": "Evalatro",
+  "version": "0.1.0",
+  "dependencies": ["Steamodded (>=1.~)"]
+}

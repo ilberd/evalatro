@@ -11,7 +11,7 @@ export interface SubmitResult { status: number; body: Record<string, unknown>; }
 /** Stable hash of a run, for idempotent dedupe. */
 function runHash(s: Submission): string {
   const seq = s.moves.map(m => `${m.tool}:${JSON.stringify(m.args ?? {})}`).join("|");
-  const key = [s.model.modelId, s.config.seed, s.config.deck, s.config.stake, s.clientMeta.startedAt ?? 0, seq].join("\n");
+  const key = [s.model.modelId, s.config.seed, s.config.deck, s.config.stake, s.config.targetAnte ?? s.runRecord.targetAnte ?? 12, s.clientMeta.startedAt ?? 0, seq].join("\n");
   return "sha256:" + createHash("sha256").update(key).digest("hex");
 }
 
@@ -31,11 +31,29 @@ function snapshotsOf(s: Submission): MoveSnapshot[] {
 
 interface Checks { hard: string[]; soft: string[]; maxAnte: number; }
 
+function stateProvesWin(raw: unknown, targetAnte: number): boolean {
+  const st: any = raw ?? {};
+  return (targetAnte <= 8 && st.won === true) || (typeof st.ante === "number" && st.ante >= targetAnte + 1);
+}
+
+function finalStateOf(s: Submission): unknown {
+  return (s as any).finalState ?? (s.runRecord as any).finalState;
+}
+
+export function transcriptProvesWin(s: Submission, targetAnte: number): boolean {
+  if (stateProvesWin(finalStateOf(s), targetAnte)) return true;
+  const maxAnte = s.moves.reduce((m, move) => {
+    const st: any = move.state ?? {};
+    return Math.max(m, typeof st.ante === "number" ? st.ante : 0);
+  }, 0);
+  return maxAnte >= targetAnte + 1;
+}
+
 /**
  * Transcript consistency checks. `hard` failures are tamper signals → reject.
  * `soft` flags are stored and force the run "unofficial" but keep it.
  */
-function sanityChecks(s: Submission, snaps: MoveSnapshot[], won: boolean, serverScore: number): Checks {
+function sanityChecks(s: Submission, snaps: MoveSnapshot[], won: boolean, serverScore: number, targetAnte: number): Checks {
   const hard: string[] = [], soft: string[] = [];
   const maxAnte = snaps.reduce((m, x) => Math.max(m, x.ante || 0), 0);
 
@@ -43,8 +61,9 @@ function sanityChecks(s: Submission, snaps: MoveSnapshot[], won: boolean, server
   let prev = 0;
   for (const x of snaps) { const a = x.ante || 0; if (a < prev) { hard.push("ante decreased mid-run"); break; } prev = Math.max(prev, a); }
 
-  // a claimed win must have reached ante 8 in the transcript
-  if (won && maxAnte < 8) hard.push("claimed win but transcript never reached ante 8");
+  if (won && maxAnte < targetAnte && !stateProvesWin(finalStateOf(s), targetAnte)) {
+    hard.push(`claimed win but transcript never reached ante ${targetAnte}`);
+  }
 
   // every accepted (non-illegal) move must be legal for the state it was made in
   for (const m of s.moves) {
@@ -92,10 +111,12 @@ export function handleSubmitRun(raw: unknown, ip = ""): SubmitResult {
 
   // Recompute the score from the transcript — the client's numbers are advisory.
   const snaps = snapshotsOf(s);
-  const won = s.runRecord.won === true;
-  const result = computeScore(deriveScoreInput(snaps, won));
+  const targetAnte = Math.max(1, Math.floor(s.config.targetAnte ?? s.runRecord.targetAnte ?? 12));
+  const won = transcriptProvesWin(s, targetAnte);
+  const result = computeScore(deriveScoreInput(snaps, won, targetAnte), targetAnte);
 
-  const checks = sanityChecks(s, snaps, won, result.score);
+  const checks = sanityChecks(s, snaps, won, result.score, targetAnte);
+  if (s.runRecord.won === true && !won) checks.soft.push("client claimed win but transcript/finalState did not prove it");
   if (checks.hard.length) return { status: 422, body: { error: "rejected: " + checks.hard.join("; ") } };
 
   const official = isOfficialHash(s.evalVersion, s.codeHash) && checks.soft.length === 0 ? 1 : 0;
@@ -107,9 +128,10 @@ export function handleSubmitRun(raw: unknown, ip = ""): SubmitResult {
 
   const rec: RunRecord = {
     ...s.runRecord,
+    targetAnte,
     won,
     outcome: outcome as RunRecord["outcome"],
-    maxAnte: won ? 8 : result.antesCleared,
+    maxAnte: won ? targetAnte : result.antesCleared,
     score: result.score,
     actions: result.actions,
     illegalActions: result.illegalActions,

@@ -1,4 +1,4 @@
-import { computeScore, deriveScoreInput, scoreFromTranscript, MoveSnapshot } from "./score.js";
+import { computeScore, deriveScoreInput, scoreFromTranscript, scoreFromTranscriptForTarget, MoveSnapshot } from "./score.js";
 
 // Pure unit tests for the scoring seam — no network, no game. Mirrors test-adapter.ts.
 
@@ -15,14 +15,14 @@ function approx(name: string, got: number, want: number, eps = 0.01) {
 }
 
 console.log("computeScore:");
-eq("flawless ante-8 win = 100", computeScore({ won: true, antesCleared: 8, blindIndex: 2, activeFraction: 0, actions: 120, illegalActions: 0 }).score, 100);
-eq("win, 2/50 illegal = 96.0", computeScore({ won: true, antesCleared: 8, blindIndex: 0, activeFraction: 0, actions: 50, illegalActions: 2 }).score, 96);
-eq("lost ante-4 boss @60%, clean = 48.3", computeScore({ won: false, antesCleared: 3, blindIndex: 2, activeFraction: 0.6, actions: 80, illegalActions: 0 }).score, 48.3);
+eq("flawless ante-12 win = 100", computeScore({ won: true, antesCleared: 12, blindIndex: 2, activeFraction: 0, actions: 120, illegalActions: 0 }).score, 100);
+eq("target win, 2/50 illegal = 96.0", computeScore({ won: true, antesCleared: 12, blindIndex: 0, activeFraction: 0, actions: 50, illegalActions: 2 }).score, 96);
+eq("lost ante-4 boss @60%, clean = 32.2", computeScore({ won: false, antesCleared: 3, blindIndex: 2, activeFraction: 0.6, actions: 80, illegalActions: 0 }).score, 32.2);
 eq("zero actions = 0", computeScore({ won: false, antesCleared: 0, blindIndex: 0, activeFraction: 0, actions: 0, illegalActions: 0 }).score, 0);
 eq("8/8 illegal = 0 (legality 0)", computeScore({ won: false, antesCleared: 2, blindIndex: 1, activeFraction: 0.5, actions: 8, illegalActions: 8 }).score, 0);
 
 console.log("\ninvariant — only a real win shows 100.0:");
-const nearWin = computeScore({ won: false, antesCleared: 7, blindIndex: 2, activeFraction: 0.99, actions: 200, illegalActions: 0 });
+const nearWin = computeScore({ won: false, antesCleared: 12, blindIndex: 2, activeFraction: 0.99, actions: 200, illegalActions: 0 });
 check("non-win progress < 1.0", nearWin.progress < 1, `progress ${nearWin.progress}`);
 check("non-win score < 100", nearWin.score < 100, `score ${nearWin.score}`);
 eq("non-win capped at 99.9", nearWin.score, 99.9);
@@ -57,9 +57,18 @@ const AT = (ante: number, state: string): MoveSnapshot =>
 }
 // Win is taken from the flag (the transcript stores pre-move states, no post-win snapshot).
 {
-  const r = scoreFromTranscript([SH(8, "BOSS", 5000, 10000)], true);
-  eq("won → antesCleared 8", r.antesCleared, 8);
+  const r = scoreFromTranscript([SH(12, "BOSS", 5000, 10000)], true);
+  eq("won target antesCleared", r.antesCleared, 12);
   eq("won → score 100", r.score, 100);
+}
+{
+  const r = scoreFromTranscript([SH(8, "BOSS", 26282, 100000)], false);
+  eq("lost ante-8 boss is not a win", r.won, false);
+  eq("lost ante-8 boss partial score on ante-12 ladder", r.score, 64.6);
+}
+{
+  const r = scoreFromTranscriptForTarget([SH(8, "BOSS", 26282, 100000)], false, 8);
+  eq("lost ante-8 boss partial score on legacy ante-8 ladder", r.score, 96.9);
 }
 // actions/illegal recomputed from the snapshots themselves.
 {
